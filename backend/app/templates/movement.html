@@ -1,0 +1,391 @@
+{% extends "base.html" %}
+
+{% block title %}Inventory Movement Intelligence{% endblock %}
+{% block header_title %}Inventory Movement Intelligence{% endblock %}
+{% block header_subtitle %}PySpark velocity classification, dead stock detection & anomaly monitoring{% endblock %}
+
+{% block content %}
+<div class="d-flex flex-column gap-4">
+
+    <!-- Overview Banner -->
+    <div class="card-custom p-3 bg-white border-start border-4 border-teal-500" style="border-left: 4px solid var(--teal-600) !important;">
+        <div class="d-flex align-items-center justify-content-between flex-wrap gap-2">
+            <div>
+                <h6 class="fw-bold mb-1 text-navy-900"><i class="bi bi-cpu me-2 text-teal-600"></i>Spark Velocity & Turnover Classifier</h6>
+                <p class="small text-muted mb-0">
+                    Apache Spark partitions transactional outflow to categorize products into Fast-Moving, Slow-Moving, Non-Moving (Dead Stock), and flags abnormal transaction volume spikes.
+                </p>
+            </div>
+            <button class="btn btn-sm btn-primary-teal" onclick="loadMovementIntelligence()">
+                <i class="bi bi-arrow-clockwise me-1"></i> Re-analyze Velocities
+            </button>
+        </div>
+    </div>
+
+    <!-- Summary KPI Cards -->
+    <div class="row g-3">
+        <div class="col-sm-6 col-xl-3">
+            <div class="stat-card emerald">
+                <div>
+                    <div class="stat-label">Fast-Moving Items</div>
+                    <div class="stat-value text-success" id="count-fast">-</div>
+                    <div class="stat-subtitle"><i class="bi bi-lightning-charge-fill text-success me-1"></i>High frequency turnover</div>
+                </div>
+                <div class="stat-icon-wrapper icon-emerald">
+                    <i class="bi bi-speedometer2"></i>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-sm-6 col-xl-3">
+            <div class="stat-card amber">
+                <div>
+                    <div class="stat-label">Slow-Moving Items</div>
+                    <div class="stat-value text-warning" id="count-slow">-</div>
+                    <div class="stat-subtitle"><i class="bi bi-hourglass-bottom text-warning me-1"></i>Subdued outbound pace</div>
+                </div>
+                <div class="stat-icon-wrapper icon-amber">
+                    <i class="bi bi-pause-circle-fill"></i>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-sm-6 col-xl-3">
+            <div class="stat-card red">
+                <div>
+                    <div class="stat-label">Dead Stock (Zero Move)</div>
+                    <div class="stat-value text-danger" id="count-dead">-</div>
+                    <div class="stat-subtitle"><i class="bi bi-slash-circle-fill text-danger me-1"></i>No outflow / capital tied up</div>
+                </div>
+                <div class="stat-icon-wrapper icon-red">
+                    <i class="bi bi-inbox-fill"></i>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-sm-6 col-xl-3">
+            <div class="stat-card navy">
+                <div>
+                    <div class="stat-label">Movement Anomalies</div>
+                    <div class="stat-value text-primary" id="count-anomalies">-</div>
+                    <div class="stat-subtitle"><i class="bi bi-exclamation-triangle text-primary me-1"></i>Unusual spikes &gt; 2.5x avg</div>
+                </div>
+                <div class="stat-icon-wrapper icon-navy">
+                    <i class="bi bi-graph-up"></i>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Unusual Stock Changes & Anomalies Alert -->
+    <div class="card-custom border-danger" id="anomaliesContainer" style="display: none;">
+        <div class="card-header-clean bg-light text-danger">
+            <h5 class="card-title-clean text-danger">
+                <i class="bi bi-exclamation-octagon-fill text-danger"></i> Detected Unusual Stock Changes & Demand Spikes
+            </h5>
+            <span class="badge bg-danger">Spark Anomaly Detector</span>
+        </div>
+        <div class="card-body-clean">
+            <div class="row g-3" id="anomaliesList"></div>
+        </div>
+    </div>
+
+    <!-- Category Demand Velocity Chart -->
+    <div class="card-custom">
+        <div class="card-header-clean">
+            <h5 class="card-title-clean">
+                <i class="bi bi-bar-chart-line"></i> Category Demand Momentum (Total Outbound Volume & Value)
+            </h5>
+            <span class="badge bg-light text-dark border">Aggregated across historical dispatches</span>
+        </div>
+        <div class="card-body-clean">
+            <div style="height: 280px; position: relative;">
+                <canvas id="categoryDemandChart"></canvas>
+            </div>
+        </div>
+    </div>
+
+    <!-- Tabs: Fast Moving / Slow Moving / Dead Stock -->
+    <div class="card-custom">
+        <div class="card-header-clean p-0 border-bottom">
+            <ul class="nav nav-tabs border-0 px-3 pt-2" id="movementTabs" role="tablist">
+                <li class="nav-item">
+                    <button class="nav-link active fw-semibold" id="fast-tab" data-bs-toggle="tab" data-bs-target="#fast-tab-pane" type="button">
+                        <i class="bi bi-lightning-charge text-success me-1"></i> Fast-Moving (<span id="tabCountFast">0</span>)
+                    </button>
+                </li>
+                <li class="nav-item">
+                    <button class="nav-link fw-semibold" id="slow-tab" data-bs-toggle="tab" data-bs-target="#slow-tab-pane" type="button">
+                        <i class="bi bi-hourglass text-warning me-1"></i> Slow-Moving (<span id="tabCountSlow">0</span>)
+                    </button>
+                </li>
+                <li class="nav-item">
+                    <button class="nav-link fw-semibold text-danger" id="dead-tab" data-bs-toggle="tab" data-bs-target="#dead-tab-pane" type="button">
+                        <i class="bi bi-slash-circle text-danger me-1"></i> Dead Stock (<span id="tabCountDead">0</span>)
+                    </button>
+                </li>
+            </ul>
+        </div>
+        <div class="card-body-clean p-0">
+            <div class="tab-content" id="movementTabsContent">
+                <!-- Fast Moving Pane -->
+                <div class="tab-pane fade show active p-0" id="fast-tab-pane">
+                    <div class="table-responsive">
+                        <table class="table table-custom align-middle">
+                            <thead>
+                                <tr>
+                                    <th>SKU</th>
+                                    <th>Product Name</th>
+                                    <th>Category</th>
+                                    <th>Current Stock</th>
+                                    <th>Total Outflow</th>
+                                    <th>Dispatch Orders</th>
+                                    <th>Location</th>
+                                    <th>Spark Insight</th>
+                                </tr>
+                            </thead>
+                            <tbody id="fastMovingTableBody">
+                                <tr><td colspan="8" class="text-center py-4 text-muted">Loading fast moving items...</td></tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <!-- Slow Moving Pane -->
+                <div class="tab-pane fade p-0" id="slow-tab-pane">
+                    <div class="table-responsive">
+                        <table class="table table-custom align-middle">
+                            <thead>
+                                <tr>
+                                    <th>SKU</th>
+                                    <th>Product Name</th>
+                                    <th>Category</th>
+                                    <th>Current Stock</th>
+                                    <th>Total Outflow</th>
+                                    <th>Location</th>
+                                    <th>Tied-Up Capital</th>
+                                    <th>Spark Recommendation</th>
+                                </tr>
+                            </thead>
+                            <tbody id="slowMovingTableBody">
+                                <tr><td colspan="8" class="text-center py-4 text-muted">Loading slow moving items...</td></tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <!-- Dead Stock Pane -->
+                <div class="tab-pane fade p-0" id="dead-tab-pane">
+                    <div class="table-responsive">
+                        <table class="table table-custom align-middle">
+                            <thead>
+                                <tr>
+                                    <th>SKU</th>
+                                    <th>Product Name</th>
+                                    <th>Category</th>
+                                    <th>Sitting Stock</th>
+                                    <th>Unit Price</th>
+                                    <th>Tied-Up Capital</th>
+                                    <th>Storage Location</th>
+                                    <th>Recommended Action</th>
+                                </tr>
+                            </thead>
+                            <tbody id="deadStockTableBody">
+                                <tr><td colspan="8" class="text-center py-4 text-muted">Loading dead stock items...</td></tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+let demandChart = null;
+
+document.addEventListener('DOMContentLoaded', () => {
+    loadMovementIntelligence();
+});
+
+async function loadMovementIntelligence() {
+    try {
+        const res = await fetch('/api/analytics/movement');
+        const result = await res.json();
+
+        if (!result.success) {
+            console.error('Movement analytics error:', result.error);
+            return;
+        }
+
+        const data = result.data;
+        const counts = data.summary_counts || {};
+
+        document.getElementById('count-fast').textContent = counts.fast || 0;
+        document.getElementById('count-slow').textContent = counts.slow || 0;
+        document.getElementById('count-dead').textContent = counts.dead || 0;
+        document.getElementById('count-anomalies').textContent = counts.anomalies || 0;
+
+        document.getElementById('tabCountFast').textContent = counts.fast || 0;
+        document.getElementById('tabCountSlow').textContent = counts.slow || 0;
+        document.getElementById('tabCountDead').textContent = counts.dead || 0;
+
+        // Populate Anomalies
+        renderAnomalies(data.unusual_movement || []);
+
+        // Render Category Demand Chart
+        renderDemandChart(data.category_demand || []);
+
+        // Render Tables
+        renderFastMoving(data.fast_moving || []);
+        renderSlowMoving(data.slow_moving || []);
+        renderDeadStock(data.dead_stock || []);
+
+    } catch (err) {
+        console.error('Failed to load movement intelligence:', err);
+    }
+}
+
+function renderAnomalies(anomalies) {
+    const container = document.getElementById('anomaliesContainer');
+    const list = document.getElementById('anomaliesList');
+    if (!anomalies.length) {
+        container.style.display = 'none';
+        return;
+    }
+
+    container.style.display = 'block';
+    list.innerHTML = anomalies.map(a => `
+        <div class="col-md-6">
+            <div class="p-3 bg-white border border-danger-subtle rounded d-flex align-items-start gap-3">
+                <i class="bi bi-lightning-fill text-danger fs-3"></i>
+                <div>
+                    <h6 class="fw-bold mb-1 text-danger">${a.product_id} - ${a.product_name}</h6>
+                    <p class="small text-muted mb-1">${a.description}</p>
+                    <span class="badge bg-danger">Spike Ratio: ${a.spike_ratio}x</span>
+                    <span class="badge bg-light text-dark border">Single Order: ${a.max_dispatch} units</span>
+                </div>
+            </div>
+        </div>
+    `).join('');
+}
+
+function renderDemandChart(categories) {
+    const ctx = document.getElementById('categoryDemandChart');
+    if (!ctx) return;
+
+    const labels = categories.map(c => c.category);
+    const demandUnits = categories.map(c => c.total_demand);
+    const demandValues = categories.map(c => c.total_val);
+
+    if (demandChart) {
+        demandChart.destroy();
+    }
+
+    demandChart = new Chart(ctx, {
+        type: 'bar',
+        data: {
+            labels: labels,
+            datasets: [
+                {
+                    label: 'Dispatched Demand (Units)',
+                    data: demandUnits,
+                    backgroundColor: '#0d9488',
+                    yAxisID: 'y'
+                },
+                {
+                    label: 'Dispatched Value (₹)',
+                    data: demandValues,
+                    backgroundColor: '#0f172a',
+                    yAxisID: 'y1'
+                }
+            ]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            scales: {
+                y: {
+                    type: 'linear',
+                    display: true,
+                    position: 'left',
+                    title: { display: true, text: 'Units' }
+                },
+                y1: {
+                    type: 'linear',
+                    display: true,
+                    position: 'right',
+                    title: { display: true, text: 'Value (₹)' },
+                    grid: { drawOnChartArea: false }
+                }
+            }
+        }
+    });
+}
+
+function renderFastMoving(items) {
+    const tbody = document.getElementById('fastMovingTableBody');
+    if (!items.length) {
+        tbody.innerHTML = '<tr><td colspan="8" class="text-center py-3 text-muted">No fast moving items found.</td></tr>';
+        return;
+    }
+    tbody.innerHTML = items.map(i => `
+        <tr>
+            <td><code>${i.product_id}</code></td>
+            <td class="fw-semibold">${i.product_name}</td>
+            <td><span class="badge bg-light text-dark border">${i.category}</span></td>
+            <td class="fw-bold">${i.current_stock}</td>
+            <td class="fw-bold text-success">${i.total_outflow} units</td>
+            <td>${i.dispatch_frequency}</td>
+            <td class="small text-muted">${i.warehouse_location}</td>
+            <td class="small text-teal-600"><i class="bi bi-check-circle-fill me-1"></i>${i.insight}</td>
+        </tr>
+    `).join('');
+}
+
+function renderSlowMoving(items) {
+    const tbody = document.getElementById('slowMovingTableBody');
+    if (!items.length) {
+        tbody.innerHTML = '<tr><td colspan="8" class="text-center py-3 text-muted">No slow moving items found.</td></tr>';
+        return;
+    }
+    tbody.innerHTML = items.map(i => `
+        <tr>
+            <td><code>${i.product_id}</code></td>
+            <td class="fw-semibold">${i.product_name}</td>
+            <td><span class="badge bg-light text-dark border">${i.category}</span></td>
+            <td class="fw-bold text-warning">${i.current_stock}</td>
+            <td>${i.total_outflow} units</td>
+            <td class="small text-muted">${i.warehouse_location}</td>
+            <td class="fw-semibold">₹${i.tied_up_capital.toLocaleString('en-IN')}</td>
+            <td class="small text-muted"><i class="bi bi-clock me-1 text-warning"></i>${i.insight}</td>
+        </tr>
+    `).join('');
+}
+
+function renderDeadStock(items) {
+    const tbody = document.getElementById('deadStockTableBody');
+    if (!items.length) {
+        tbody.innerHTML = '<tr><td colspan="8" class="text-center py-3 text-muted">No dead stock identified! Excellent capital circulation.</td></tr>';
+        return;
+    }
+    tbody.innerHTML = items.map(i => `
+        <tr>
+            <td><code>${i.product_id}</code></td>
+            <td class="fw-semibold text-danger">${i.product_name}</td>
+            <td><span class="badge bg-light text-dark border">${i.category}</span></td>
+            <td class="fw-bold text-danger">${i.current_stock}</td>
+            <td>₹${i.unit_price.toLocaleString('en-IN', {minimumFractionDigits: 2, maximumFractionDigits: 2})}</td>
+            <td class="fw-bold text-danger">₹${i.tied_up_capital.toLocaleString('en-IN')}</td>
+            <td class="small text-muted">${i.warehouse_location}</td>
+            <td class="small text-danger fw-semibold">
+                <i class="bi bi-exclamation-circle-fill me-1"></i>0 recent orders. Mark for clearance or promotional bundling.
+            </td>
+        </tr>
+    `).join('');
+}
+</script>
+{% endblock %}

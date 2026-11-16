@@ -1,0 +1,194 @@
+{% extends "base.html" %}
+
+{% block title %}Warehouse Reports & Data Export{% endblock %}
+{% block header_title %}Reports & Analytical Data Export{% endblock %}
+{% block header_subtitle %}Download real-time Spark analytical summaries, valuation audits, and transaction ledgers{% endblock %}
+
+{% block content %}
+<div class="d-flex flex-column gap-4">
+
+    <!-- Report Download Cards Grid -->
+    <div class="row g-3">
+        <!-- 1. Inventory Master Valuation Report -->
+        <div class="col-md-6 col-xl-3">
+            <div class="card-custom h-100 p-3 d-flex flex-column justify-content-between">
+                <div>
+                    <div class="stat-icon-wrapper icon-teal mb-3">
+                        <i class="bi bi-file-earmark-spreadsheet"></i>
+                    </div>
+                    <h6 class="fw-bold text-navy-900 mb-1">Inventory Valuation Report</h6>
+                    <p class="small text-muted mb-3">Complete catalog audit with stock quantities, unit pricing, total holding values, suppliers, and locations.</p>
+                </div>
+                <a href="/api/export/inventory" class="btn btn-sm btn-primary-teal w-100">
+                    <i class="bi bi-download me-1"></i> Download CSV
+                </a>
+            </div>
+        </div>
+
+        <!-- 2. Stock Risk Assessment Report -->
+        <div class="col-md-6 col-xl-3">
+            <div class="card-custom h-100 p-3 d-flex flex-column justify-content-between">
+                <div>
+                    <div class="stat-icon-wrapper icon-amber mb-3">
+                        <i class="bi bi-shield-shaded"></i>
+                    </div>
+                    <h6 class="fw-bold text-navy-900 mb-1">Stock Risk Assessment Report</h6>
+                    <p class="small text-muted mb-3">PySpark depletion forecasting audit with daily consumption rate, estimated days until run-out, and risk reasons.</p>
+                </div>
+                <a href="/api/export/risk" class="btn btn-sm btn-outline-warning w-100 text-dark fw-semibold">
+                    <i class="bi bi-download me-1"></i> Download CSV
+                </a>
+            </div>
+        </div>
+
+        <!-- 3. Transactions & Movement History -->
+        <div class="col-md-6 col-xl-3">
+            <div class="card-custom h-100 p-3 d-flex flex-column justify-content-between">
+                <div>
+                    <div class="stat-icon-wrapper icon-navy mb-3">
+                        <i class="bi bi-arrow-left-right"></i>
+                    </div>
+                    <h6 class="fw-bold text-navy-900 mb-1">Stock Movement Ledger</h6>
+                    <p class="small text-muted mb-3">Detailed chronological record of all incoming shipments, outbound dispatches, and inventory adjustments.</p>
+                </div>
+                <a href="/api/export/transactions" class="btn btn-sm btn-outline-dark w-100">
+                    <i class="bi bi-download me-1"></i> Download CSV
+                </a>
+            </div>
+        </div>
+
+        <!-- 4. Category Performance Summary -->
+        <div class="col-md-6 col-xl-3">
+            <div class="card-custom h-100 p-3 d-flex flex-column justify-content-between">
+                <div>
+                    <div class="stat-icon-wrapper icon-emerald mb-3">
+                        <i class="bi bi-pie-chart"></i>
+                    </div>
+                    <h6 class="fw-bold text-navy-900 mb-1">Category Performance Report</h6>
+                    <p class="small text-muted mb-3">Aggregated category metrics: SKU count, total units, cumulative holding valuation, and low stock items.</p>
+                </div>
+                <a href="/api/export/categories" class="btn btn-sm btn-outline-success w-100">
+                    <i class="bi bi-download me-1"></i> Download CSV
+                </a>
+            </div>
+        </div>
+    </div>
+
+    <!-- Live Category Report Preview Table -->
+    <div class="card-custom">
+        <div class="card-header-clean">
+            <h5 class="card-title-clean">
+                <i class="bi bi-table"></i> Category-Wise Inventory Summary (Spark Processed)
+            </h5>
+            <a href="/api/export/categories" class="btn btn-sm btn-outline-secondary">
+                <i class="bi bi-download me-1"></i> Export Category CSV
+            </a>
+        </div>
+        <div class="card-body-clean p-0">
+            <div class="table-responsive">
+                <table class="table table-custom align-middle">
+                    <thead>
+                        <tr>
+                            <th>Category Name</th>
+                            <th>Total Catalog SKUs</th>
+                            <th>Physical Stock Units</th>
+                            <th>Total Holding Valuation ($)</th>
+                            <th>Average SKU Price ($)</th>
+                            <th>Low Stock Items</th>
+                        </tr>
+                    </thead>
+                    <tbody id="categoryReportTableBody">
+                        <tr><td colspan="6" class="text-center py-4 text-muted"><i class="bi bi-arrow-repeat spin me-1"></i> Loading category summaries...</td></tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <!-- Monthly Movement Historical Summary -->
+    <div class="card-custom">
+        <div class="card-header-clean">
+            <h5 class="card-title-clean">
+                <i class="bi bi-calendar3"></i> Monthly Stock Movement Ledger Summary
+            </h5>
+            <a href="/api/export/transactions" class="btn btn-sm btn-outline-secondary">
+                <i class="bi bi-download me-1"></i> Export Transactions CSV
+            </a>
+        </div>
+        <div class="card-body-clean p-0">
+            <div class="table-responsive">
+                <table class="table table-custom align-middle">
+                    <thead>
+                        <tr>
+                            <th>Period (Year-Month)</th>
+                            <th>Incoming Stock (Units)</th>
+                            <th>Outgoing Dispatches (Units)</th>
+                            <th>Net Inventory Delta</th>
+                            <th>Total Outbound Value ($)</th>
+                        </tr>
+                    </thead>
+                    <tbody id="monthlyReportTableBody">
+                        <tr><td colspan="5" class="text-center py-4 text-muted"><i class="bi bi-arrow-repeat spin me-1"></i> Loading monthly trends...</td></tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+document.addEventListener('DOMContentLoaded', () => {
+    loadReportsData();
+});
+
+async function loadReportsData() {
+    try {
+        const res = await fetch('/api/analytics/dashboard');
+        const result = await res.json();
+        if (!result.success) return;
+
+        const data = result.data;
+
+        // Populate Category Report Table
+        const catTbody = document.getElementById('categoryReportTableBody');
+        const categories = data.categories || [];
+        if (categories.length) {
+            catTbody.innerHTML = categories.map(c => `
+                <tr>
+                    <td><strong>${c.category}</strong></td>
+                    <td>${c.product_count}</td>
+                    <td class="fw-bold">${c.total_units.toLocaleString()}</td>
+                    <td class="fw-semibold text-dark">$${c.category_value.toLocaleString(undefined, {minimumFractionDigits: 2})}</td>
+                    <td>$${c.avg_price.toFixed(2)}</td>
+                    <td>${c.low_stock_items > 0 ? `<span class="badge badge-high">${c.low_stock_items} Items</span>` : '<span class="text-muted">None</span>'}</td>
+                </tr>
+            `).join('');
+        }
+
+        // Populate Monthly Movement Table
+        const monthTbody = document.getElementById('monthlyReportTableBody');
+        const trends = data.monthly_trends || [];
+        if (trends.length) {
+            monthTbody.innerHTML = trends.map(m => {
+                const delta = m.incoming - m.outgoing;
+                const deltaClass = delta >= 0 ? 'text-success' : 'text-danger';
+                return `
+                    <tr>
+                        <td><code>${m.period}</code></td>
+                        <td class="text-info fw-semibold">+${m.incoming.toLocaleString()}</td>
+                        <td class="text-teal-600 fw-semibold">-${m.outgoing.toLocaleString()}</td>
+                        <td class="fw-bold ${deltaClass}">${delta > 0 ? '+' : ''}${delta.toLocaleString()}</td>
+                        <td class="fw-semibold">$${m.outgoing_value.toLocaleString(undefined, {minimumFractionDigits: 2})}</td>
+                    </tr>
+                `;
+            }).join('');
+        }
+    } catch (err) {
+        console.error('Failed to load reports summary:', err);
+    }
+}
+</script>
+{% endblock %}

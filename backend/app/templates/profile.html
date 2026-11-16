@@ -1,0 +1,146 @@
+{% extends "base.html" %}
+
+{% block title %}Admin Profile & Spark Diagnostics{% endblock %}
+{% block header_title %}Administrator Profile & Spark Cluster{% endblock %}
+{% block header_subtitle %}Manage administrative credentials and inspect live Apache Spark runtime health{% endblock %}
+
+{% block content %}
+<div class="d-flex flex-column gap-4">
+
+    <div class="row g-4">
+        <!-- Profile Settings Card -->
+        <div class="col-lg-6">
+            <div class="card-custom h-100 p-4">
+                <div class="d-flex align-items-center gap-3 mb-4 pb-3 border-bottom">
+                    <div class="bg-primary text-white rounded-circle d-flex align-items-center justify-content-center" style="width: 54px; height: 54px; font-size: 1.5rem; font-weight: 700;">
+                        {{ user['username'][:1].upper() }}
+                    </div>
+                    <div>
+                        <h5 class="fw-bold text-navy-900 mb-0">{{ user['full_name'] or user['username'] }}</h5>
+                        <div class="small text-muted">{{ user['role'] }} &bull; <code>{{ user['email'] }}</code></div>
+                        <div class="small text-muted" style="font-size: 0.75rem;">Account Created: {{ user['created_at'] }}</div>
+                    </div>
+                </div>
+
+                <form method="POST" action="{{ url_for('views.profile_page') }}">
+                    <div class="mb-3">
+                        <label class="form-label small fw-semibold text-muted">Full Name</label>
+                        <input type="text" name="full_name" class="form-control" value="{{ user['full_name'] or '' }}" required>
+                    </div>
+
+                    <div class="mb-3">
+                        <label class="form-label small fw-semibold text-muted">Email Address</label>
+                        <input type="email" name="email" class="form-control" value="{{ user['email'] }}" required>
+                    </div>
+
+                    <div class="mb-4">
+                        <label class="form-label small fw-semibold text-muted">New Password (leave blank to keep unchanged)</label>
+                        <input type="password" name="new_password" class="form-control" placeholder="••••••••">
+                    </div>
+
+                    <button type="submit" class="btn btn-primary-teal">
+                        <i class="bi bi-check2-circle me-1"></i> Update Profile Details
+                    </button>
+                </form>
+            </div>
+        </div>
+
+        <!-- Apache Spark Cluster & JVM Diagnostics Card -->
+        <div class="col-lg-6">
+            <div class="card-custom h-100 p-4">
+                <div class="d-flex align-items-center justify-content-between mb-3 pb-2 border-bottom">
+                    <div class="d-flex align-items-center gap-2">
+                        <div class="stat-icon-wrapper icon-teal" style="width: 38px; height: 38px; font-size: 1.1rem;">
+                            <i class="bi bi-cpu-fill"></i>
+                        </div>
+                        <h6 class="fw-bold mb-0 text-navy-900">Apache Spark Cluster Diagnostics</h6>
+                    </div>
+                    <span class="badge bg-success">SPARK ACTIVE</span>
+                </div>
+
+                <div class="table-responsive">
+                    <table class="table table-sm table-borderless align-middle mb-0">
+                        <tbody>
+                            <tr>
+                                <td class="text-muted small" style="width: 40%;">Spark Version:</td>
+                                <td class="fw-bold text-navy-900">PySpark {{ spark.version }}</td>
+                            </tr>
+                            <tr>
+                                <td class="text-muted small">Cluster Master:</td>
+                                <td><code>{{ spark.master }}</code></td>
+                            </tr>
+                            <tr>
+                                <td class="text-muted small">Application Name:</td>
+                                <td class="fw-semibold text-dark">{{ spark.app_name }}</td>
+                            </tr>
+                            <tr>
+                                <td class="text-muted small">JVM Runtime Home:</td>
+                                <td class="small text-truncate" style="max-width: 240px;" title="{{ spark.java_home }}"><code>{{ spark.java_home }}</code></td>
+                            </tr>
+                            <tr>
+                                <td class="text-muted small">Python Worker Path:</td>
+                                <td class="small text-truncate" style="max-width: 240px;" title="{{ spark.python_worker }}"><code>{{ spark.python_worker }}</code></td>
+                            </tr>
+                            <tr>
+                                <td class="text-muted small">Shuffle Partitions:</td>
+                                <td><span class="badge bg-light text-dark border">2 Local Partitions</span></td>
+                            </tr>
+                            <tr>
+                                <td class="text-muted small">Last Processing Time:</td>
+                                <td class="fw-bold text-teal-600">{{ spark.last_execution_ms }} milliseconds</td>
+                            </tr>
+                            <tr>
+                                <td class="text-muted small">Last Aggregation Run:</td>
+                                <td class="small text-muted">{{ spark.last_processed_timestamp or 'Active' }}</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+
+                <div class="mt-3 p-3 bg-light rounded border small text-muted">
+                    <i class="bi bi-check-circle-fill text-success me-1"></i> PySpark is genuinely processing inventory datasets, window aggregations, and depletion models on this node.
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Administrative Audit Log Feed -->
+    <div class="card-custom">
+        <div class="card-header-clean">
+            <h5 class="card-title-clean">
+                <i class="bi bi-journal-text"></i> Administrative Activity & Audit Trail
+            </h5>
+            <span class="badge bg-light text-dark border">Security Audit</span>
+        </div>
+        <div class="card-body-clean p-0">
+            <div class="table-responsive">
+                <table class="table table-custom align-middle">
+                    <thead>
+                        <tr>
+                            <th>Action Type</th>
+                            <th>Admin Username</th>
+                            <th>Operation Details</th>
+                            <th>Timestamp</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% if activities %}
+                            {% for act in activities %}
+                            <tr>
+                                <td><span class="badge bg-light text-dark border"><code>{{ act['action'] }}</code></span></td>
+                                <td class="fw-semibold text-dark">{{ act['username'] }}</td>
+                                <td class="small text-muted">{{ act['details'] }}</td>
+                                <td class="small text-muted">{{ act['created_at'] }}</td>
+                            </tr>
+                            {% endfor %}
+                        {% else %}
+                            <tr><td colspan="4" class="text-center py-3 text-muted">No audit logs recorded yet.</td></tr>
+                        {% endif %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+</div>
+{% endblock %}

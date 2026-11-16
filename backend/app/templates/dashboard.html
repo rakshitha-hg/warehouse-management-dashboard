@@ -1,0 +1,277 @@
+{% extends "base.html" %}
+
+{% block title %}Executive Warehouse Dashboard{% endblock %}
+{% block header_title %}Executive Warehouse Dashboard{% endblock %}
+{% block header_subtitle %}Live Apache Spark big data aggregation and inventory intelligence{% endblock %}
+
+{% block content %}
+<div class="d-flex flex-column gap-4">
+
+    <!-- Spark Live Status & Execution Banner -->
+    <div class="card-custom p-3 bg-white border-start border-4 border-teal-500 d-flex flex-wrap align-items-center justify-content-between gap-3" style="border-left: 4px solid var(--teal-500) !important;">
+        <div class="d-flex align-items-center gap-3">
+            <div class="stat-icon-wrapper icon-teal">
+                <i class="bi bi-cpu-fill"></i>
+            </div>
+            <div>
+                <div class="d-flex align-items-center gap-2">
+                    <h6 class="mb-0 fw-bold text-navy-900">Apache Spark Analytics Engine</h6>
+                    <span class="badge bg-success" id="spark-status-badge">ONLINE</span>
+                    <span class="badge bg-dark">PySpark {{ spark.version }}</span>
+                </div>
+                <p class="small text-muted mb-0">
+                    Master: <code>{{ spark.master }}</code> | Execution Latency: <strong id="spark-latency">{{ spark.last_execution_ms }} ms</strong> | Last Spark Processed: <span id="spark-timestamp">{{ spark.last_processed_timestamp or 'Just now' }}</span>
+                </p>
+            </div>
+        </div>
+        <div class="d-flex gap-2">
+            <button class="btn btn-sm btn-outline-secondary" onclick="loadDashboardAnalytics()">
+                <i class="bi bi-arrow-clockwise me-1"></i> Refresh Spark Analytics
+            </button>
+            <a href="{{ url_for('views.upload_page') }}" class="btn btn-sm btn-primary-teal">
+                <i class="bi bi-cloud-arrow-up me-1"></i> Ingest Bulk Data
+            </a>
+        </div>
+    </div>
+
+    <!-- 8 Summary Statistics Cards -->
+    <div class="row g-3">
+        <!-- 1. Total Products -->
+        <div class="col-sm-6 col-xl-3">
+            <div class="stat-card navy">
+                <div>
+                    <div class="stat-label">Total SKUs</div>
+                    <div class="stat-value" id="stat-total-products">-</div>
+                    <div class="stat-subtitle"><i class="bi bi-collection text-primary me-1"></i>Active catalog products</div>
+                </div>
+                <div class="stat-icon-wrapper icon-navy">
+                    <i class="bi bi-boxes"></i>
+                </div>
+            </div>
+        </div>
+
+        <!-- 2. Total Stock Units -->
+        <div class="col-sm-6 col-xl-3">
+            <div class="stat-card teal">
+                <div>
+                    <div class="stat-label">Available Inventory</div>
+                    <div class="stat-value" id="stat-total-units">-</div>
+                    <div class="stat-subtitle"><i class="bi bi-check2-circle text-success me-1"></i>Total physical units</div>
+                </div>
+                <div class="stat-icon-wrapper icon-teal">
+                    <i class="bi bi-box-seam"></i>
+                </div>
+            </div>
+        </div>
+
+        <!-- 3. Total Inventory Valuation -->
+        <div class="col-sm-6 col-xl-3">
+            <div class="stat-card emerald">
+                <div>
+                    <div class="stat-label">Inventory Valuation</div>
+                    <div class="stat-value" id="stat-inventory-val">₹0</div>
+                    <div class="stat-subtitle"><i class="bi bi-currency-rupee text-success me-1"></i>Current holding value</div>
+                </div>
+                <div class="stat-icon-wrapper icon-emerald">
+                    <i class="bi bi-cash-stack"></i>
+                </div>
+            </div>
+        </div>
+
+        <!-- 4. Low-Stock Products -->
+        <div class="col-sm-6 col-xl-3">
+            <div class="stat-card amber">
+                <div>
+                    <div class="stat-label">Low-Stock Items</div>
+                    <div class="stat-value text-warning" id="stat-low-stock">-</div>
+                    <div class="stat-subtitle"><i class="bi bi-exclamation-circle text-warning me-1"></i>At or below threshold</div>
+                </div>
+                <div class="stat-icon-wrapper icon-amber">
+                    <i class="bi bi-shield-alert"></i>
+                </div>
+            </div>
+        </div>
+
+        <!-- 5. Out-of-Stock Products -->
+        <div class="col-sm-6 col-xl-3">
+            <div class="stat-card red">
+                <div>
+                    <div class="stat-label">Out of Stock</div>
+                    <div class="stat-value text-danger" id="stat-out-of-stock">-</div>
+                    <div class="stat-subtitle"><i class="bi bi-x-circle text-danger me-1"></i>Immediate restock required</div>
+                </div>
+                <div class="stat-icon-wrapper icon-red">
+                    <i class="bi bi-slash-circle"></i>
+                </div>
+            </div>
+        </div>
+
+        <!-- 6. Total Incoming Stock -->
+        <div class="col-sm-6 col-xl-3">
+            <div class="stat-card sky">
+                <div>
+                    <div class="stat-label">Incoming Stock</div>
+                    <div class="stat-value" id="stat-incoming-units">-</div>
+                    <div class="stat-subtitle"><i class="bi bi-arrow-down-left text-info me-1"></i>Inbound units received</div>
+                </div>
+                <div class="stat-icon-wrapper icon-sky">
+                    <i class="bi bi-box-arrow-in-down"></i>
+                </div>
+            </div>
+        </div>
+
+        <!-- 7. Total Outgoing Stock -->
+        <div class="col-sm-6 col-xl-3">
+            <div class="stat-card navy">
+                <div>
+                    <div class="stat-label">Outgoing Dispatches</div>
+                    <div class="stat-value" id="stat-outgoing-units">-</div>
+                    <div class="stat-subtitle"><i class="bi bi-arrow-up-right text-primary me-1"></i>Units fulfilled</div>
+                </div>
+                <div class="stat-icon-wrapper icon-navy">
+                    <i class="bi bi-truck"></i>
+                </div>
+            </div>
+        </div>
+
+        <!-- 8. Fulfillment Valuation -->
+        <div class="col-sm-6 col-xl-3">
+            <div class="stat-card teal">
+                <div>
+                    <div class="stat-label">Dispatched Value</div>
+                    <div class="stat-value" id="stat-outgoing-val">₹0</div>
+                    <div class="stat-subtitle"><i class="bi bi-graph-up text-success me-1"></i>Total outbound value</div>
+                </div>
+                <div class="stat-icon-wrapper icon-teal">
+                    <i class="bi bi-cart-check"></i>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Main Charts Row 1: Stock Flow Trends & Category Breakdown -->
+    <div class="row g-3">
+        <!-- Monthly Stock Movement Trends -->
+        <div class="col-lg-8">
+            <div class="card-custom h-100">
+                <div class="card-header-clean">
+                    <h5 class="card-title-clean">
+                        <i class="bi bi-activity"></i> Stock Movement Trends (Incoming vs Outgoing)
+                    </h5>
+                    <span class="badge bg-light text-dark border">Spark Aggregated Time-Series</span>
+                </div>
+                <div class="card-body-clean">
+                    <div style="height: 310px; position: relative;">
+                        <canvas id="monthlyMovementChart"></canvas>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Category Distribution -->
+        <div class="col-lg-4">
+            <div class="card-custom h-100">
+                <div class="card-header-clean">
+                    <h5 class="card-title-clean">
+                        <i class="bi bi-pie-chart"></i> Inventory by Category
+                    </h5>
+                    <span class="badge bg-light text-dark border">Valuation Share</span>
+                </div>
+                <div class="card-body-clean d-flex flex-column align-items-center justify-content-center">
+                    <div style="height: 250px; width: 100%; position: relative;">
+                        <canvas id="categoryDistributionChart"></canvas>
+                    </div>
+                    <div id="categorySummaryLegend" class="w-100 mt-2 small text-muted text-center"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Charts Row 2: Top Selling Products & Low Stock Analysis -->
+    <div class="row g-3">
+        <!-- Top Selling / Outflow Products -->
+        <div class="col-lg-6">
+            <div class="card-custom h-100">
+                <div class="card-header-clean">
+                    <h5 class="card-title-clean">
+                        <i class="bi bi-trophy"></i> Top-Moving Products (Outbound Volume)
+                    </h5>
+                    <span class="badge bg-light text-dark border">Spark Top-K Rank</span>
+                </div>
+                <div class="card-body-clean">
+                    <div style="height: 290px; position: relative;">
+                        <canvas id="topSellingChart"></canvas>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Low Stock Risk Analysis -->
+        <div class="col-lg-6">
+            <div class="card-custom h-100">
+                <div class="card-header-clean">
+                    <h5 class="card-title-clean">
+                        <i class="bi bi-shield-alert text-warning"></i> Low-Stock & Depletion Analysis
+                    </h5>
+                    <a href="{{ url_for('views.risk_analysis_page') }}" class="btn btn-sm btn-link text-decoration-none">View All Risks &rarr;</a>
+                </div>
+                <div class="card-body-clean">
+                    <div class="table-responsive" style="max-height: 290px;">
+                        <table class="table table-custom table-sm align-middle">
+                            <thead>
+                                <tr>
+                                    <th>SKU</th>
+                                    <th>Product</th>
+                                    <th>Available</th>
+                                    <th>Threshold</th>
+                                    <th>Location</th>
+                                    <th>Status</th>
+                                </tr>
+                            </thead>
+                            <tbody id="lowStockTableBody">
+                                <tr><td colspan="6" class="text-center py-3 text-muted">Loading low stock items...</td></tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Recent Warehouse Activities Feed -->
+    <div class="card-custom">
+        <div class="card-header-clean">
+            <h5 class="card-title-clean">
+                <i class="bi bi-clock-history"></i> Recent Warehouse Transactions & Activities
+            </h5>
+            <a href="{{ url_for('views.inventory_page') }}" class="btn btn-sm btn-outline-secondary">View Inventory Ledger</a>
+        </div>
+        <div class="card-body-clean p-0">
+            <div class="table-responsive">
+                <table class="table table-custom align-middle">
+                    <thead>
+                        <tr>
+                            <th>Reference</th>
+                            <th>Product</th>
+                            <th>Type</th>
+                            <th>Quantity</th>
+                            <th>Unit Value</th>
+                            <th>Total Value</th>
+                            <th>Timestamp</th>
+                            <th>Notes</th>
+                        </tr>
+                    </thead>
+                    <tbody id="recentTransactionsTableBody">
+                        <tr><td colspan="8" class="text-center py-4 text-muted"><i class="bi bi-arrow-repeat spin me-1"></i> Loading live transaction feed...</td></tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script src="{{ url_for('static', filename='js/dashboard.js') }}"></script>
+{% endblock %}

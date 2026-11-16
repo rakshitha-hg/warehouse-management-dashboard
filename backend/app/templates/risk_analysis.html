@@ -1,0 +1,234 @@
+{% extends "base.html" %}
+
+{% block title %}Smart Stock Risk Analysis{% endblock %}
+{% block header_title %}Smart Stock Risk Analysis{% endblock %}
+{% block header_subtitle %}Apache Spark depletion velocity modeling, run-out forecasting & risk diagnostics{% endblock %}
+
+{% block content %}
+<div class="d-flex flex-column gap-4">
+
+    <!-- Spark Algorithm Explanation Banner -->
+    <div class="card-custom p-3 bg-white border-start border-4 border-amber-500" style="border-left: 4px solid #f59e0b !important;">
+        <div class="d-flex align-items-center justify-content-between flex-wrap gap-2">
+            <div>
+                <h6 class="fw-bold mb-1 text-navy-900"><i class="bi bi-shield-shaded me-2 text-warning"></i>Spark Depletion Forecasting Model</h6>
+                <p class="small text-muted mb-0">
+                    PySpark joins 30-day outgoing transactions against current stock to calculate continuous average daily consumption (\(\text{Consumption} = \sum \text{Outflow}_{30\text{d}} / 30\)) and estimated days until depletion (\(\text{Days} = \text{Stock} / \text{Consumption}\)).
+                </p>
+            </div>
+            <div class="d-flex gap-2">
+                <a href="/api/export/risk" class="btn btn-sm btn-outline-secondary">
+                    <i class="bi bi-download me-1"></i> Export Risk CSV
+                </a>
+                <button class="btn btn-sm btn-primary-teal" onclick="loadRiskAnalysis()">
+                    <i class="bi bi-arrow-clockwise me-1"></i> Re-compute Spark Risks
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- 4 Risk Level Summary Cards -->
+    <div class="row g-3">
+        <!-- Critical Risk -->
+        <div class="col-sm-6 col-xl-3">
+            <div class="stat-card red cursor-pointer" onclick="filterByRisk('Critical')">
+                <div>
+                    <div class="stat-label">Critical Depletion Risk</div>
+                    <div class="stat-value text-danger" id="risk-count-critical">-</div>
+                    <div class="stat-subtitle"><i class="bi bi-exclamation-triangle-fill text-danger me-1"></i>0 stock or &lt; 3 days buffer</div>
+                </div>
+                <div class="stat-icon-wrapper icon-red">
+                    <i class="bi bi-fire"></i>
+                </div>
+            </div>
+        </div>
+
+        <!-- High Risk -->
+        <div class="col-sm-6 col-xl-3">
+            <div class="stat-card amber cursor-pointer" onclick="filterByRisk('High')">
+                <div>
+                    <div class="stat-label">High Risk</div>
+                    <div class="stat-value text-warning" id="risk-count-high">-</div>
+                    <div class="stat-subtitle"><i class="bi bi-exclamation-circle-fill text-warning me-1"></i>&lt; 14 days or below threshold</div>
+                </div>
+                <div class="stat-icon-wrapper icon-amber">
+                    <i class="bi bi-exclamation-diamond-fill"></i>
+                </div>
+            </div>
+        </div>
+
+        <!-- Moderate Risk -->
+        <div class="col-sm-6 col-xl-3">
+            <div class="stat-card sky cursor-pointer" onclick="filterByRisk('Moderate')">
+                <div>
+                    <div class="stat-label">Moderate Risk</div>
+                    <div class="stat-value text-info" id="risk-count-moderate">-</div>
+                    <div class="stat-subtitle"><i class="bi bi-info-circle-fill text-info me-1"></i>14 to 30 days buffer</div>
+                </div>
+                <div class="stat-icon-wrapper icon-sky">
+                    <i class="bi bi-hourglass-split"></i>
+                </div>
+            </div>
+        </div>
+
+        <!-- Healthy Stock -->
+        <div class="col-sm-6 col-xl-3">
+            <div class="stat-card emerald cursor-pointer" onclick="filterByRisk('Healthy')">
+                <div>
+                    <div class="stat-label">Healthy Buffer</div>
+                    <div class="stat-value text-success" id="risk-count-healthy">-</div>
+                    <div class="stat-subtitle"><i class="bi bi-shield-check text-success me-1"></i>30+ days safe runway</div>
+                </div>
+                <div class="stat-icon-wrapper icon-emerald">
+                    <i class="bi bi-check-circle-fill"></i>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Risk Analysis Table Card -->
+    <div class="card-custom">
+        <div class="card-header-clean flex-wrap gap-2">
+            <h5 class="card-title-clean">
+                <i class="bi bi-table"></i> Evaluated Products Risk Matrix (<span id="riskProductCount">0</span> SKUs)
+            </h5>
+            <div class="d-flex align-items-center gap-2">
+                <select id="riskLevelSelect" class="form-select form-select-sm" onchange="applyRiskFilter()">
+                    <option value="ALL">Show All Risk Levels</option>
+                    <option value="Critical">Critical Only</option>
+                    <option value="High">High Risk Only</option>
+                    <option value="Moderate">Moderate Only</option>
+                    <option value="Healthy">Healthy Only</option>
+                </select>
+                <input type="text" id="riskSearch" class="form-control form-control-sm" placeholder="Filter by SKU / Name..." oninput="applyRiskFilter()" style="width: 200px;">
+            </div>
+        </div>
+        <div class="card-body-clean p-0">
+            <div class="table-responsive">
+                <table class="table table-custom align-middle">
+                    <thead>
+                        <tr>
+                            <th>Product SKU</th>
+                            <th>Product Name</th>
+                            <th>Category</th>
+                            <th>Current Stock</th>
+                            <th>Reorder Point</th>
+                            <th>30-Day Outflow</th>
+                            <th>Daily Burn Rate</th>
+                            <th>Est. Depletion Runway</th>
+                            <th>Assigned Risk</th>
+                            <th style="min-width: 280px;">Reason & Diagnostic Explanation</th>
+                        </tr>
+                    </thead>
+                    <tbody id="riskTableBody">
+                        <tr><td colspan="10" class="text-center py-4 text-muted"><i class="bi bi-arrow-repeat spin me-1"></i> Running PySpark risk analysis...</td></tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+let allRiskProducts = [];
+
+document.addEventListener('DOMContentLoaded', () => {
+    loadRiskAnalysis();
+});
+
+async function loadRiskAnalysis() {
+    const tbody = document.getElementById('riskTableBody');
+    try {
+        const res = await fetch('/api/analytics/risk');
+        const result = await res.json();
+
+        if (!result.success) {
+            tbody.innerHTML = `<tr><td colspan="10" class="text-center text-danger py-4">Spark computation error: ${result.error}</td></tr>`;
+            return;
+        }
+
+        const data = result.data;
+        allRiskProducts = data.products || [];
+
+        // Update counts
+        const counts = data.counts || {};
+        document.getElementById('risk-count-critical').textContent = counts.Critical || 0;
+        document.getElementById('risk-count-high').textContent = counts.High || 0;
+        document.getElementById('risk-count-moderate').textContent = counts.Moderate || 0;
+        document.getElementById('risk-count-healthy').textContent = counts.Healthy || 0;
+
+        applyRiskFilter();
+    } catch (err) {
+        tbody.innerHTML = `<tr><td colspan="10" class="text-center text-danger py-4">Failed to load risk analysis: ${err.message}</td></tr>`;
+    }
+}
+
+function filterByRisk(level) {
+    document.getElementById('riskLevelSelect').value = level;
+    applyRiskFilter();
+}
+
+function applyRiskFilter() {
+    const level = document.getElementById('riskLevelSelect').value;
+    const search = (document.getElementById('riskSearch').value || '').toLowerCase();
+
+    let filtered = allRiskProducts;
+    if (level !== 'ALL') {
+        filtered = filtered.filter(p => p.risk_level === level);
+    }
+    if (search) {
+        filtered = filtered.filter(p => 
+            p.product_id.toLowerCase().includes(search) || 
+            p.product_name.toLowerCase().includes(search) ||
+            p.category.toLowerCase().includes(search)
+        );
+    }
+
+    document.getElementById('riskProductCount').textContent = filtered.length;
+    renderRiskTable(filtered);
+}
+
+function renderRiskTable(products) {
+    const tbody = document.getElementById('riskTableBody');
+    if (!products.length) {
+        tbody.innerHTML = '<tr><td colspan="10" class="text-center py-4 text-muted">No products found matching the criteria.</td></tr>';
+        return;
+    }
+
+    tbody.innerHTML = products.map(p => {
+        let badgeClass = 'badge-healthy';
+        if (p.risk_level === 'Critical') badgeClass = 'badge-critical';
+        else if (p.risk_level === 'High') badgeClass = 'badge-high';
+        else if (p.risk_level === 'Moderate') badgeClass = 'badge-moderate';
+
+        const daysText = typeof p.days_until_depletion === 'number' 
+            ? `${p.days_until_depletion} Days` 
+            : p.days_until_depletion;
+
+        return `
+            <tr>
+                <td><code>${p.product_id}</code></td>
+                <td class="fw-semibold">${p.product_name}</td>
+                <td><span class="badge bg-light text-dark border">${p.category}</span></td>
+                <td class="fw-bold ${p.current_stock === 0 ? 'text-danger' : (p.current_stock <= p.reorder_threshold ? 'text-warning' : 'text-dark')}">
+                    ${p.current_stock}
+                </td>
+                <td class="text-muted">${p.reorder_threshold}</td>
+                <td>${p.historical_outflow_30d} units</td>
+                <td class="fw-semibold text-teal-600">${p.avg_daily_consumption}/day</td>
+                <td class="fw-bold ${p.risk_level === 'Critical' ? 'text-danger' : (p.risk_level === 'High' ? 'text-warning' : 'text-success')}">
+                    ${daysText}
+                </td>
+                <td><span class="badge ${badgeClass}">${p.risk_level.toUpperCase()}</span></td>
+                <td class="small text-muted">
+                    <i class="bi bi-info-circle me-1 text-primary"></i>${p.explanation}
+                </td>
+            </tr>
+        `;
+    }).join('');
+}
+</script>
+{% endblock %}

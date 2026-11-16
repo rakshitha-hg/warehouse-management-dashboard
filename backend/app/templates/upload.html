@@ -1,0 +1,226 @@
+{% extends "base.html" %}
+
+{% block title %}Data Management & CSV Ingestion{% endblock %}
+{% block header_title %}Data Management & CSV Ingestion{% endblock %}
+{% block header_subtitle %}Upload bulk warehouse datasets, validate schemas, and trigger PySpark analytics{% endblock %}
+
+{% block content %}
+<div class="d-flex flex-column gap-4">
+
+    <!-- Pipeline Architecture Banner -->
+    <div class="card-custom p-3 bg-white border-start border-4 border-teal-500" style="border-left: 4px solid var(--teal-600) !important;">
+        <div class="d-flex align-items-center justify-content-between flex-wrap gap-2">
+            <div>
+                <h6 class="fw-bold mb-1 text-navy-900"><i class="bi bi-diagram-3-fill me-2 text-teal-600"></i>End-to-End Spark Data Ingestion Pipeline</h6>
+                <p class="small text-muted mb-0">
+                    <code>CSV Upload / SQLite DB</code> &rarr; <code>PySpark DataFrames</code> &rarr; <code>Spark SQL Aggregations & Window Functions</code> &rarr; <code>Flask REST API</code> &rarr; <code>Interactive Chart.js Dashboard</code>
+                </p>
+            </div>
+            <div>
+                <button class="btn btn-sm btn-outline-danger" onclick="resetDemoData()">
+                    <i class="bi bi-arrow-counterclockwise me-1"></i> Reset / Reload Demo Dataset
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Upload Cards Row -->
+    <div class="row g-4">
+        <!-- 1. Bulk Products CSV Upload -->
+        <div class="col-lg-6">
+            <div class="card-custom h-100 p-4">
+                <div class="d-flex align-items-center justify-content-between mb-3">
+                    <div class="d-flex align-items-center gap-2">
+                        <div class="stat-icon-wrapper icon-teal" style="width: 38px; height: 38px; font-size: 1.1rem;">
+                            <i class="bi bi-boxes"></i>
+                        </div>
+                        <h6 class="fw-bold mb-0 text-navy-900">Bulk Products CSV Ingestion</h6>
+                    </div>
+                    <a href="/data/demo/sample_products.csv" download class="btn btn-sm btn-outline-secondary">
+                        <i class="bi bi-download me-1"></i> Sample Products CSV
+                    </a>
+                </div>
+
+                <p class="small text-muted mb-3">
+                    Upload a CSV file containing catalog items. Required headers: <code>product_id</code>, <code>product_name</code>, <code>category</code>, <code>quantity</code>, <code>unit_price</code>, <code>supplier</code>, <code>warehouse_location</code>, <code>reorder_threshold</code>.
+                </p>
+
+                <form id="uploadProductsForm" onsubmit="submitProductsCsv(event)">
+                    <div class="border border-2 border-dashed rounded p-4 text-center mb-3 bg-light" id="productDropzone">
+                        <i class="bi bi-cloud-arrow-up text-teal-600 fs-1 mb-2"></i>
+                        <div class="fw-semibold small text-navy-900 mb-1">Select or drop Products CSV file</div>
+                        <div class="small text-muted mb-2">Maximum file size: 32MB (.csv format)</div>
+                        <input type="file" id="productFileInput" name="file" accept=".csv" class="form-control form-control-sm mx-auto" style="max-width: 280px;" required>
+                    </div>
+
+                    <button type="submit" class="btn btn-primary-teal w-100" id="btnUploadProducts">
+                        <i class="bi bi-upload me-1"></i> Ingest & Process Products
+                    </button>
+                </form>
+
+                <div id="productUploadFeedback" class="mt-3"></div>
+            </div>
+        </div>
+
+        <!-- 2. Bulk Transactions CSV Upload -->
+        <div class="col-lg-6">
+            <div class="card-custom h-100 p-4">
+                <div class="d-flex align-items-center justify-content-between mb-3">
+                    <div class="d-flex align-items-center gap-2">
+                        <div class="stat-icon-wrapper icon-sky" style="width: 38px; height: 38px; font-size: 1.1rem;">
+                            <i class="bi bi-arrow-left-right"></i>
+                        </div>
+                        <h6 class="fw-bold mb-0 text-navy-900">Bulk Stock Movement CSV</h6>
+                    </div>
+                    <a href="/data/demo/sample_transactions.csv" download class="btn btn-sm btn-outline-secondary">
+                        <i class="bi bi-download me-1"></i> Sample Movements CSV
+                    </a>
+                </div>
+
+                <p class="small text-muted mb-3">
+                    Upload inbound and outbound stock movement logs. Required headers: <code>product_id</code>, <code>transaction_type</code> (INCOMING/OUTGOING/ADJUSTMENT), <code>quantity</code>, <code>unit_price</code>, <code>reference_no</code>, <code>notes</code>.
+                </p>
+
+                <form id="uploadTxForm" onsubmit="submitTxCsv(event)">
+                    <div class="border border-2 border-dashed rounded p-4 text-center mb-3 bg-light">
+                        <i class="bi bi-cloud-arrow-up text-sky-500 fs-1 mb-2" style="color: var(--sky-500);"></i>
+                        <div class="fw-semibold small text-navy-900 mb-1">Select or drop Transactions CSV file</div>
+                        <div class="small text-muted mb-2">Automatically adjusts product quantities</div>
+                        <input type="file" id="txFileInput" name="file" accept=".csv" class="form-control form-control-sm mx-auto" style="max-width: 280px;" required>
+                    </div>
+
+                    <button type="submit" class="btn btn-navy w-100" id="btnUploadTx">
+                        <i class="bi bi-upload me-1"></i> Ingest Movement Ledger
+                    </button>
+                </form>
+
+                <div id="txUploadFeedback" class="mt-3"></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Sample CSV Templates Demonstration Guide -->
+    <div class="card-custom p-4">
+        <h5 class="fw-bold text-navy-900 mb-3"><i class="bi bi-filetype-csv me-2 text-teal-600"></i>CSV File Structure Reference & Standards</h5>
+        <div class="row g-4">
+            <div class="col-md-6">
+                <h6 class="fw-bold small text-muted text-uppercase">1. Products CSV Structure Example</h6>
+                <div class="bg-light p-3 rounded border">
+                    <pre class="mb-0 small" style="white-space: pre-wrap; font-family: monospace;">product_id,product_name,category,quantity,unit_price,supplier,warehouse_location,reorder_threshold
+PRD-1001,Industrial IoT Gateway Router,Electronics,35,249.99,Cisco Industrial,Zone A - Aisle 01 - Bin 101,15
+PRD-2001,Hydraulic Pallet Jack 5500 lbs,Industrial Tools,14,450.00,Crown Equipment,Zone B - Aisle 01 - Bay 201,5</pre>
+                </div>
+            </div>
+            <div class="col-md-6">
+                <h6 class="fw-bold small text-muted text-uppercase">2. Transactions CSV Structure Example</h6>
+                <div class="bg-light p-3 rounded border">
+                    <pre class="mb-0 small" style="white-space: pre-wrap; font-family: monospace;">product_id,transaction_type,quantity,unit_price,reference_no,notes
+PRD-1001,INCOMING,50,249.99,PO-98214,Bulk Shipment Delivery
+PRD-1001,OUTGOING,12,249.99,SO-10294,Customer Order Dispatch</pre>
+                </div>
+            </div>
+        </div>
+    </div>
+
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+async function submitProductsCsv(event) {
+    event.preventDefault();
+    const btn = document.getElementById('btnUploadProducts');
+    const feedback = document.getElementById('productUploadFeedback');
+    const fileInput = document.getElementById('productFileInput');
+
+    if (!fileInput.files.length) return;
+    const formData = new FormData();
+    formData.append('file', fileInput.files[0]);
+
+    btn.disabled = true;
+    btn.innerHTML = '<i class="bi bi-arrow-repeat spin me-1"></i> Ingesting via PySpark...';
+    feedback.innerHTML = '<div class="alert alert-info py-2 small">Processing and validating CSV rows...</div>';
+
+    try {
+        const res = await fetch('/api/upload/products', { method: 'POST', body: formData });
+        const result = await res.json();
+
+        if (result.success) {
+            feedback.innerHTML = `
+                <div class="alert alert-success py-2 small">
+                    <i class="bi bi-check-circle-fill me-1"></i> <strong>Success:</strong> ${result.message}
+                </div>
+            `;
+            fileInput.value = '';
+        } else {
+            feedback.innerHTML = `
+                <div class="alert alert-danger py-2 small">
+                    <i class="bi bi-exclamation-triangle-fill me-1"></i> <strong>Upload Failed:</strong> ${result.error}
+                </div>
+            `;
+        }
+    } catch (err) {
+        feedback.innerHTML = `<div class="alert alert-danger py-2 small">Network error: ${err.message}</div>`;
+    } finally {
+        btn.disabled = false;
+        btn.innerHTML = '<i class="bi bi-upload me-1"></i> Ingest & Process Products';
+    }
+}
+
+async function submitTxCsv(event) {
+    event.preventDefault();
+    const btn = document.getElementById('btnUploadTx');
+    const feedback = document.getElementById('txUploadFeedback');
+    const fileInput = document.getElementById('txFileInput');
+
+    if (!fileInput.files.length) return;
+    const formData = new FormData();
+    formData.append('file', fileInput.files[0]);
+
+    btn.disabled = true;
+    btn.innerHTML = '<i class="bi bi-arrow-repeat spin me-1"></i> Processing Transactions...';
+    feedback.innerHTML = '<div class="alert alert-info py-2 small">Adjusting inventory & logging ledger...</div>';
+
+    try {
+        const res = await fetch('/api/upload/transactions', { method: 'POST', body: formData });
+        const result = await res.json();
+
+        if (result.success) {
+            feedback.innerHTML = `
+                <div class="alert alert-success py-2 small">
+                    <i class="bi bi-check-circle-fill me-1"></i> <strong>Success:</strong> ${result.message}
+                </div>
+            `;
+            fileInput.value = '';
+        } else {
+            feedback.innerHTML = `
+                <div class="alert alert-danger py-2 small">
+                    <i class="bi bi-exclamation-triangle-fill me-1"></i> <strong>Upload Failed:</strong> ${result.error}
+                </div>
+            `;
+        }
+    } catch (err) {
+        feedback.innerHTML = `<div class="alert alert-danger py-2 small">Network error: ${err.message}</div>`;
+    } finally {
+        btn.disabled = false;
+        btn.innerHTML = '<i class="bi bi-upload me-1"></i> Ingest Movement Ledger';
+    }
+}
+
+async function resetDemoData() {
+    if (!confirm('Reload default demo dataset? This will reset catalog products and 250+ realistic transactions.')) return;
+    try {
+        const res = await fetch('/api/demo/reset', { method: 'POST' });
+        const result = await res.json();
+        if (result.success) {
+            alert('Warehouse dataset reloaded successfully!');
+            window.location.href = '/dashboard';
+        } else {
+            alert('Failed to reset: ' + result.error);
+        }
+    } catch (err) {
+        alert('Error: ' + err.message);
+    }
+}
+</script>
+{% endblock %}

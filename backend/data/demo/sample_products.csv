@@ -1,0 +1,16 @@
+product_id,product_name,category,quantity,unit_price,supplier,warehouse_location,reorder_threshold
+PRD-1001,Industrial IoT Gateway Router,Electronics,35,20749.17,Cisco Industrial,Bengaluru - Aisle 01 - Bin 101,15
+PRD-1002,Thermal Barcode Scanner 2D,Electronics,8,9960.0,Zebra Tech,Bengaluru - Aisle 01 - Bin 102,15
+PRD-1003,Heavy Duty UPS 1500VA,Electronics,3,28261.5,APC Schneider,Bengaluru - Aisle 02 - Bin 103,5
+PRD-1004,Solid State Drive 2TB NVMe,Electronics,75,12035.0,Samsung Semiconductor,Bengaluru - Aisle 02 - Bin 104,20
+PRD-1005,Ruggedized Tablet PC 10-inch,Electronics,0,43160.0,Panasonic Toughbook,Bengaluru - Aisle 03 - Bin 105,8
+PRD-1006,Cat6A Shielded Ethernet Cable (1000ft),Electronics,42,9545.0,Belden Cable,Bengaluru - Aisle 03 - Bin 106,10
+PRD-1007,Industrial Smart Sensor Node,Electronics,120,4025.5,Bosch Connected Devices,Bengaluru - Aisle 04 - Bin 107,25
+PRD-1008,Wireless AP Outdoor Long-Range,Electronics,12,15687.0,Ubiquiti Networks,Bengaluru - Aisle 04 - Bin 108,15
+PRD-2001,Hydraulic Pallet Jack 5500 lbs,Industrial Tools,14,37350.0,Crown Equipment,Mysuru - Aisle 01 - Bay 201,5
+PRD-2002,Electric Forklift Battery 48V,Industrial Tools,2,232400.0,EnerSys Power,Mysuru - Aisle 01 - Bay 202,3
+PRD-2003,Pneumatic Impact Wrench Kit,Industrial Tools,22,16185.0,Ingersoll Rand,Mysuru - Aisle 02 - Bay 203,10
+PRD-2004,Heavy Duty Strapping Tool,Industrial Tools,4,9130.0,Signode Industrial,Mysuru - Aisle 02 - Bay 204,10
+PRD-2005,Stainless Steel Ball Bearings 6205,Industrial Tools,250,705.5,SKF Industrial,Mysuru - Aisle 03 - Bay 205,50
+PRD-2006,Industrial Air Compressor 50L,Industrial Tools,6,56440.0,Atlas Copco,Mysuru - Aisle 03 - Bay 206,4
+PRD-2007,Precision Torque Wrench Digital,Industrial Tools,18,13695.0,Snap-on Tools,Mysuru - Aisle 04 - Bay 207,8
